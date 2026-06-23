@@ -1,0 +1,190 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { applyFilmFilter } from "@/lib/film-filter";
+import {
+  SHOT_LIMIT,
+  getShotsTaken,
+  incrementShots,
+  getGuestId,
+} from "@/lib/session";
+
+export const Route = createFileRoute("/e/$eventId")({
+  component: CameraView,
+});
+
+function CameraView() {
+  const { eventId } = Route.useParams();
+  const navigate = useNavigate();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const flashRef = useRef<HTMLDivElement | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [eventTitle, setEventTitle] = useState<string>("");
+  const [shotsLeft, setShotsLeft] = useState<number>(SHOT_LIMIT);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [facing, setFacing] = useState<"environment" | "user">("environment");
+
+  // On mount: hydrate the session-storage shot counter & fetch the event label.
+  useEffect(() => {
+    setShotsLeft(SHOT_LIMIT - getShotsTaken(eventId));
+    supabase.from("events").select("title").eq("id", eventId).maybeSingle()
+      .then(({ data }) => setEventTitle(data?.title ?? ""));
+  }, [eventId]);
+
+  // Acquire the camera stream. Re-runs when the guest hits FLIP.
+  useEffect(() => {
+    let active = true;
+    let acquired: MediaStream | null = null;
+    async function start() {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1920 } },
+          audio: false,
+        });
+        if (!active) { s.getTracks().forEach((t) => t.stop()); return; }
+        acquired = s;
+        setStream(s);
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+          await videoRef.current.play().catch(() => {});
+        }
+      } catch (e) {
+        setError((e as Error)?.message ?? "Camera permission denied.");
+      }
+    }
+    start();
+    return () => {
+      active = false;
+      acquired?.getTracks().forEach((t) => t.stop());
+    };
+  }, [facing]);
+
+  async function shoot() {
+    if (busy || !videoRef.current || shotsLeft <= 0) return;
+    setBusy(true);
+    // Trigger the white shutter flash overlay.
+    if (flashRef.current) {
+      flashRef.current.classList.remove("shutter-flash");
+      void flashRef.current.offsetWidth; // force reflow so the animation re-fires
+      flashRef.current.classList.add("shutter-flash");
+    }
+    try {
+      // 1. Capture + filter locally — the raw frame never leaves the device.
+      const blob = await applyFilmFilter(videoRef.current);
+      // 2. Upload the compressed jpeg to storage.
+      const path = `${eventId}/${crypto.randomUUID()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("grain-photos")
+        .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("grain-photos").getPublicUrl(path);
+      // 3. Insert a row tagged with this guest's anonymous session id.
+      const { error: insErr } = await supabase.from("photos").insert({
+        event_id: eventId,
+        image_url: pub.publicUrl,
+        guest_session: getGuestId(),
+      });
+      if (insErr) throw insErr;
+      // 4. Decrement the local 5-shot cap.
+      const taken = incrementShots(eventId);
+      setShotsLeft(SHOT_LIMIT - taken);
+    } catch (e) {
+      setError((e as Error)?.message ?? "Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-black flex flex-col text-foreground select-none">
+      {/* Top HUD */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-3">
+        <Link to="/" className="text-[10px] tracking-[0.3em] text-muted-foreground">← EXIT</Link>
+        <span className="text-[10px] tracking-[0.3em] text-muted-foreground uppercase truncate max-w-[40%]">
+          {eventTitle || "GRAIN"}
+        </span>
+        <button
+          onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}
+          className="text-[10px] tracking-[0.3em] text-muted-foreground"
+        >
+          FLIP
+        </button>
+      </div>
+
+      <div className="px-5 mt-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] tracking-[0.3em] text-primary">● REC</span>
+          <span className="text-[11px] tracking-[0.3em] text-foreground">
+            SHOTS REMAINING: <span className="text-primary font-bold">{shotsLeft}</span>/{SHOT_LIMIT}
+          </span>
+        </div>
+      </div>
+
+      {/* Square neon-bordered viewport */}
+      <div className="px-5 mt-4">
+        <div className="relative w-full aspect-square neon-border bg-black overflow-hidden grain-overlay">
+          {error ? (
+            <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
+              <p className="text-xs tracking-wider text-destructive">{error.toUpperCase()}</p>
+            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${facing === "user" ? "scale-x-[-1]" : ""}`}
+                style={{ filter: "contrast(1.18) saturate(1.05) sepia(0.18)" }}
+              />
+              <span className="absolute top-2 left-2 size-5 border-primary border-t-2 border-l-2" />
+              <span className="absolute top-2 right-2 size-5 border-primary border-t-2 border-r-2" />
+              <span className="absolute bottom-2 left-2 size-5 border-primary border-b-2 border-l-2" />
+              <span className="absolute bottom-2 right-2 size-5 border-primary border-b-2 border-r-2" />
+            </>
+          )}
+          <div ref={flashRef} className="pointer-events-none absolute inset-0 bg-white opacity-0" />
+        </div>
+        <div className="mt-2 flex justify-between text-[10px] tracking-[0.3em] text-muted-foreground">
+          <span>ISO 400</span>
+          <span>F/2.8</span>
+          <span>1/125</span>
+          <span>FILM // 90s</span>
+        </div>
+      </div>
+
+      {/* Shutter */}
+      <div className="flex-1 flex items-center justify-center pt-8 pb-10">
+        <button
+          aria-label="Shutter"
+          onClick={shoot}
+          disabled={busy || shotsLeft <= 0 || !stream}
+          className="relative size-24 rounded-full bg-primary disabled:bg-muted disabled:cursor-not-allowed active:scale-95 transition-transform"
+          style={{
+            boxShadow:
+              "0 0 0 4px oklch(0.08 0 0), 0 0 0 6px var(--color-neon), 0 0 40px -2px var(--color-neon)",
+          }}
+        >
+          {busy && (
+            <span className="absolute inset-0 rounded-full border-4 border-background border-t-transparent animate-spin" />
+          )}
+        </button>
+      </div>
+
+      {shotsLeft <= 0 && (
+        <div className="px-5 pb-8 -mt-4">
+          <div className="border-2 border-accent p-5 bg-card">
+            <p className="text-[10px] tracking-[0.4em] text-accent mb-1">// ROLL FINISHED</p>
+            <p className="text-sm tracking-wider">You shot the whole roll. See you at the reveal.</p>
+            <button
+              onClick={() => navigate({ to: "/g/$eventId", params: { eventId } })}
+              className="mt-3 w-full py-3 border border-accent text-accent text-xs tracking-[0.2em] font-bold"
+            >
+              GO TO THE FEED →
+            </button>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
