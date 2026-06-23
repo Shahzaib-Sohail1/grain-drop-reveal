@@ -118,8 +118,13 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <div className="flex min-h-screen flex-col">
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <footer className="mt-auto flex items-center justify-center pb-safe pt-2 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <span className="opacity-40">Always use your phone&apos;s native Safari or Chrome browser</span>
+        </footer>
+      </div>
     </QueryClientProvider>
   );
 }
