@@ -14,7 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      events: {
+        Row: {
+          created_at: string
+          id: string
+          reveal_timestamp: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reveal_timestamp: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reveal_timestamp?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      photos: {
+        Row: {
+          created_at: string
+          event_id: string
+          guest_session: string | null
+          id: string
+          image_url: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          guest_session?: string | null
+          id?: string
+          image_url: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          guest_session?: string | null
+          id?: string
+          image_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photos_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
