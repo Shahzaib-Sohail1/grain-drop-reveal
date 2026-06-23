@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
       { property: "og:description", content: "Spin up a delayed-reveal disposable camera event in 10 seconds." },
     ],
   }),
-  component: () => <div className="p-4 bg-zinc-950 min-h-screen text-white"><Link to="/dashboard" className="bg-cyan-400 text-black p-4 font-black block text-center uppercase border-4 border-black">👉 CLICK HERE TO FORCE OPEN ARCHIVE 👈</Link></div>,,
+  component: () => <div className="p-4 bg-zinc-950 min-h-screen text-white"><Link to="/dashboard" className="bg-cyan-400 text-black p-4 font-black block text-center uppercase border-4 border-black">👉 CLICK HERE TO FORCE OPEN ARCHIVE 👈</Link></div>,
 });
 
 // Duration presets for the reveal countdown — hours from creation.
