@@ -8,7 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-
+import { HypeTicker } from "../components/HypeTicker";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -118,9 +118,33 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col bg-zinc-950 font-mono text-white">
+        
+        {/* 1. INJECT OUR REAL-TIME HYPETICKER AT THE TOP */}
+        <HypeTicker />
+
+        {/* 2. BRUTALIST HEADER NAVIGATION BAR */}
+        <nav className="w-full bg-black border-b-4 border-black p-4 flex justify-between items-center z-50">
+          <Link 
+            to="/" 
+            className="text-xl font-black tracking-tighter text-white uppercase hover:text-yellow-400 transition-colors"
+          >
+            ⚡ GRAIN
+          </Link>
+          
+          <Link 
+            to="/dashboard" 
+            className="bg-cyan-400 text-black font-black text-xs uppercase px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all"
+          >
+            Archive 📸
+          </Link>
+        </nav>
+
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
+        <main className="flex-1">
+          <Outlet />
+        </main>
+
         <footer className="mt-auto flex items-center justify-center pb-4 pt-2 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           <span className="opacity-40">Always use your phone&apos;s native Safari or Chrome browser</span>
         </footer>
